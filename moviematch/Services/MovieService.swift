@@ -11,46 +11,42 @@ import RxCocoa
 
 class MovieService {
     static let shared = MovieService()
-    private let baseURL = "https://api.themoviedb.org/3/movie/popular"
-
+    private let baseURL = "https://api.themoviedb.org/3/movie"
+    
+    private func makeRequest(url: URL) -> URLRequest {
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.setValue("Bearer \(Config.tmdbToken)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+    
+    private func execute<T: Decodable>(_ request: URLRequest) -> Single<T> {
+        return URLSession.shared.rx.response(request: request)
+            .map { response, data -> Data in
+                guard (200...299).contains(response.statusCode) else {
+                    throw URLError(.badServerResponse)
+                }
+                return data
+            }
+            .map { try JSONDecoder().decode(T.self, from: $0) }
+            .observe(on: MainScheduler.instance)
+            .asSingle()
+    }
+    
     func fetchMovies(page: Int = 1) -> Single<MovieResponse> {
-        guard let url = URL(string: "\(baseURL)?page=\(page)") else {
-            return .error(URLError(.badURL))
-        }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(Config.tmdbToken)", forHTTPHeaderField: "Authorization")
-
-        return URLSession.shared.rx.data(request: request)
-            .map { try JSONDecoder().decode(MovieResponse.self, from: $0) }
-            .observe(on: MainScheduler.instance)
-            .asSingle()
+        guard let url = URL(string: "\(baseURL)/popular?page=\(page)") else { return .error(URLError(.badURL)) }
+        return execute(makeRequest(url: url))
     }
-
+    
     func fetchMovieDetail(movieId: Int) -> Single<MovieDetail> {
-        let urlString = "https://api.themoviedb.org/3/movie/\(movieId)?append_to_response=videos"
-        guard let url = URL(string: urlString) else {
-            return .error(URLError(.badURL))
-        }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(Config.tmdbToken)", forHTTPHeaderField: "Authorization")
-
-        return URLSession.shared.rx.data(request: request)
-            .map { try JSONDecoder().decode(MovieDetail.self, from: $0) }
-            .observe(on: MainScheduler.instance)
-            .asSingle()
+        let urlString = "\(baseURL)/\(movieId)?append_to_response=videos"
+        guard let url = URL(string: urlString) else { return .error(URLError(.badURL)) }
+        return execute(makeRequest(url: url))
     }
 
-    func fetchReviews(movieId: Int, page: Int = 1) -> Single<ReviewResponse> {
-        let urlString = "https://api.themoviedb.org/3/movie/\(movieId)/reviews?page=\(page)"
-        guard let url = URL(string: urlString) else {
-            return .error(URLError(.badURL))
-        }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(Config.tmdbToken)", forHTTPHeaderField: "Authorization")
-
-        return URLSession.shared.rx.data(request: request)
-            .map { try JSONDecoder().decode(ReviewResponse.self, from: $0) }
-            .observe(on: MainScheduler.instance)
-            .asSingle()
+    func fetchReviews(movieId: Int,
+                      page: Int = 1) -> Single<ReviewResponse> {
+        let urlString = "\(baseURL)/\(movieId)/reviews?page=\(page)"
+        guard let url = URL(string: urlString) else { return .error(URLError(.badURL)) }
+        return execute(makeRequest(url: url))
     }
 }

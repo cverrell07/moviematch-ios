@@ -28,8 +28,9 @@ class MovieDetailViewModel {
     private var isFetchingReviews = false
     private let disposeBag = DisposeBag()
     
-    func review(at index: Int) -> Review {
-        reviews.value[index]
+    func review(at index: Int) -> Review? {
+        guard index < reviews.value.count else { return nil }
+        return reviews.value[index]
     }
 
     init(movieId: Int) {
@@ -42,6 +43,10 @@ class MovieDetailViewModel {
             .flatMapLatest { [weak self] _ -> Single<MovieDetail> in
                 guard let self else { return .never() }
                 return MovieService.shared.fetchMovieDetail(movieId: self.movieId)
+                    .catch { [weak self] err in
+                        self?.error.accept(err.localizedDescription)
+                        return .never()
+                    }
             }
             .subscribe(
                 onNext: { [weak self] detail in
@@ -52,6 +57,7 @@ class MovieDetailViewModel {
                             $0.type == "Trailer" && $0.site == "YouTube"
                         }
                     )
+                    self.loadReviews()
                 },
                 onError: { [weak self] err in
                     self?.error.accept(err.localizedDescription)

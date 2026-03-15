@@ -12,6 +12,7 @@ import RxCocoa
 class MovieListViewModel {
     let movies: BehaviorRelay<[Movie]> = .init(value: [])
     let fetchNextPage: PublishRelay<Void> = .init()
+    let error: PublishRelay<String> = .init()
 
     private var currentPage = 1
     private var totalPages = 1
@@ -28,6 +29,11 @@ class MovieListViewModel {
                 guard let self else { return .never() }
                 self.isFetching = true
                 return MovieService.shared.fetchMovies(page: self.currentPage)
+                    .catch { [weak self] err in
+                        self?.isFetching = false
+                        self?.error.accept(err.localizedDescription)
+                        return Single<MovieResponse>.never()
+                    }
             }
             .subscribe(
                 onNext: { [weak self] response in
@@ -42,5 +48,12 @@ class MovieListViewModel {
                 }
             )
             .disposed(by: disposeBag)
+    }
+    
+    func reset() {
+        currentPage = 1
+        totalPages = 1
+        isFetching = false
+        movies.accept([])
     }
 }

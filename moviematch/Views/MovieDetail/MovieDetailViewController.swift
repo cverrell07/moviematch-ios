@@ -13,6 +13,14 @@ class MovieDetailViewController: UIViewController {
     private var collectionView: UICollectionView!
     private let viewModel: MovieDetailViewModel
     private let disposeBag = DisposeBag()
+    
+    private let activityIndicator: UIActivityIndicatorView = {
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.color = .white
+        indicator.hidesWhenStopped = true
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        return indicator
+    }()
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
@@ -50,21 +58,27 @@ class MovieDetailViewController: UIViewController {
             forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
             withReuseIdentifier: MoviePosterHeader.identifier
         )
-
+        
+        view.addSubview(activityIndicator)
         view.addSubview(collectionView)
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
+            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            
             collectionView.topAnchor.constraint(equalTo: view.topAnchor),
             collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+        activityIndicator.startAnimating()
     }
 
     private func bindViewModel() {
         viewModel.movie
             .compactMap { $0 }
             .subscribe(onNext: { [weak self] _ in
+                self?.activityIndicator.stopAnimating()
                 self?.collectionView.reloadData()
                 self?.updateHeaderSize()
             })
@@ -78,7 +92,9 @@ class MovieDetailViewController: UIViewController {
             .disposed(by: disposeBag)
 
         viewModel.error
+            .observe(on: MainScheduler.instance)
             .subscribe(onNext: { [weak self] message in
+                self?.activityIndicator.stopAnimating()
                 self?.showErrorAlert(message)
             })
             .disposed(by: disposeBag)
@@ -96,7 +112,12 @@ class MovieDetailViewController: UIViewController {
 
     private func showErrorAlert(_ message: String) {
         let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        alert.addAction(UIAlertAction(title: "Retry", style: .default) { [weak self] _ in
+            self?.viewModel.fetchAll.accept(())
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
+            self?.navigationController?.popViewController(animated: true)
+        })
         present(alert, animated: true)
     }
 }
@@ -125,7 +146,10 @@ extension MovieDetailViewController: UICollectionViewDataSource {
             withReuseIdentifier: ReviewViewCell.identifier,
             for: indexPath
         ) as! ReviewViewCell
-        cell.configure(review: viewModel.review(at: indexPath.item - 1))
+        guard let review = viewModel.review(at: indexPath.item - 1) else {
+            return UICollectionViewCell()
+        }
+        cell.configure(review: review)
         return cell
     }
 

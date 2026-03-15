@@ -13,6 +13,26 @@ class HomeViewController: UIViewController {
     private let viewModel = MovieListViewModel()
     private var collectionView: UICollectionView!
     private let disposeBag = DisposeBag()
+    
+    private let emptyStateView: UIView = {
+        let view = UIView()
+        view.isHidden = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = UILabel()
+        label.text = "No movies available.\nPull to refresh."
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
+        return view
+    }()
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
@@ -45,14 +65,49 @@ class HomeViewController: UIViewController {
         collectionView.dataSource = self
         collectionView.delegate = self
     }
+    
+    private func setupRefreshControl() {
+        let refreshControl = UIRefreshControl()
+        refreshControl.tintColor = .white
+        collectionView.refreshControl = refreshControl
+
+        refreshControl.rx.controlEvent(.valueChanged)
+            .subscribe(onNext: { [weak self] in
+                guard let self else { return }
+                self.viewModel.reset()
+                self.viewModel.fetchNextPage.accept(())
+            })
+            .disposed(by: disposeBag)
+    }
 
     private func bindViewModel() {
         viewModel.movies
             .observe(on: MainScheduler.instance)
-            .subscribe(onNext: { [weak self] _ in
-                self?.collectionView.reloadData()
+            .subscribe(onNext: { [weak self] movies in
+                guard let self else { return }
+                self.collectionView.reloadData()
+                self.emptyStateView.isHidden = !movies.isEmpty
+                self.collectionView.refreshControl?.endRefreshing()
             })
             .disposed(by: disposeBag)
+
+        viewModel.error
+            .observe(on: MainScheduler.instance)
+            .subscribe(onNext: { [weak self] message in
+                guard let self else { return }
+                self.collectionView.refreshControl?.endRefreshing()
+                self.showErrorAlert(message)
+            })
+            .disposed(by: disposeBag)
+    }
+    
+    private func showErrorAlert(_ message: String) {
+        let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Retry", style: .default) { [weak self] _ in
+            self?.viewModel.fetchNextPage.accept(())
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
     }
 }
 
