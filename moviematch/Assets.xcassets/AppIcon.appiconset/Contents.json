@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "moviematch_appIcon_dark 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -12,6 +13,7 @@
           "value" : "dark"
         }
       ],
+      "filename" : "moviematch_appIcon_dark.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
